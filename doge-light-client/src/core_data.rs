@@ -34,11 +34,10 @@ use zerocopy_derive::{FromBytes, Immutable, IntoBytes};
 
 use crate::{
     constants::{DogeNetworkConfig, MERGED_MINING_HEADER, VERSION_AUXPOW}, doge::transaction::BTCTransaction, error::{DogeBridgeError, QDogeResult}, hash::{
-        scrypt_doge::scrypt_1024_1_1_256,
-        sha256::QBTCHash256Hasher,
-        traits::{BytesHasher, MerkleHasher},
+        merkle, scrypt_doge::scrypt_1024_1_1_256, sha256::QBTCHash256Hasher, traits::{BytesHasher, MerkleHasher}
     }
 };
+use bytes::{Buf, BufMut};
 
 pub type QHash256 = [u8; 32];
 pub type QHash160 = [u8; 20];
@@ -76,23 +75,27 @@ pub struct QStandardBlockHeader {
 
 impl QStandardBlockHeader {
     pub fn to_bytes_fixed(&self) -> [u8; 80] {
-        let mut bytes = [0u8; 80];
-        bytes[0..4].copy_from_slice(&self.version.to_le_bytes());
-        bytes[4..36].copy_from_slice(&self.previous_block_hash);
-        bytes[36..68].copy_from_slice(&self.merkle_root);
-        bytes[68..72].copy_from_slice(&self.timestamp.to_le_bytes());
-        bytes[72..76].copy_from_slice(&self.bits.to_le_bytes());
-        bytes[76..80].copy_from_slice(&self.nonce.to_le_bytes());
+        let  mut bytes = [0u8; 80];
+        let mut buf = &mut bytes[..];
+        buf.put_u32_le(self.version);
+        buf.put_slice(&self.previous_block_hash);
+        buf.put_slice(&self.merkle_root);
+        buf.put_u32_le(self.timestamp);
+        buf.put_u32_le(self.bits);
+        buf.put_u32_le(self.nonce);
 
         bytes
     }
     pub fn from_bytes_fixed(data: &[u8; 80]) -> Self {
-        let version = u32::from_le_bytes(data[0..4].try_into().unwrap());
-        let previous_block_hash: [u8; 32] = data[4..36].try_into().unwrap();
-        let merkle_root: [u8; 32] = data[36..68].try_into().unwrap();
-        let timestamp = u32::from_le_bytes(data[68..72].try_into().unwrap());
-        let bits = u32::from_le_bytes(data[72..76].try_into().unwrap());
-        let nonce = u32::from_le_bytes(data[76..80].try_into().unwrap());
+        let mut buf = data.as_ref();
+        let version = buf.get_u32_le();
+        let mut previous_block_hash = [0u8; 32];
+        let mut merkle_root = [0u8; 32];
+        buf.copy_to_slice(&mut previous_block_hash);
+        buf.copy_to_slice(&mut merkle_root);
+        let timestamp = buf.get_u32_le();
+        let bits = buf.get_u32_le();
+        let nonce = buf.get_u32_le();
         Self {
             version,
             previous_block_hash,
@@ -110,12 +113,15 @@ impl QStandardBlockHeader {
                 data.len()
             );
         }
-        let version = u32::from_le_bytes(data[0..4].try_into().unwrap());
-        let previous_block_hash: [u8; 32] = data[4..36].try_into().unwrap();
-        let merkle_root: [u8; 32] = data[36..68].try_into().unwrap();
-        let timestamp = u32::from_le_bytes(data[68..72].try_into().unwrap());
-        let bits = u32::from_le_bytes(data[72..76].try_into().unwrap());
-        let nonce = u32::from_le_bytes(data[76..80].try_into().unwrap());
+        let mut buf = data;
+        let version = buf.get_u32_le();
+        let mut previous_block_hash = [0u8; 32];
+        let mut merkle_root = [0u8; 32];
+        buf.copy_to_slice(&mut previous_block_hash);
+        buf.copy_to_slice(&mut merkle_root);
+        let timestamp = buf.get_u32_le();
+        let bits = buf.get_u32_le();
+        let nonce = buf.get_u32_le();
         Ok(Self {
             version,
             previous_block_hash,
